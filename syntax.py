@@ -4,22 +4,32 @@ C_TYPES = {
     "int","char","float","double","void","long","short",
     "unsigned","signed","const","static","extern","auto","bool"
 }
+
+COMPOUND_KW = {
+    "if","else","while","for","do","switch","case","default",
+    "struct","class","namespace","try","catch","public","private","protected"
+}
+
 PYTHON_BLOCK_KW = {
     "if","elif","else","for","while","def","class","with","try","except","finally"
 }
 
+INVALID_C_PUNCT = {"@", "$", "`", "?"}
+
+
 def syntax_analyze(tokens, language="c"):
     if language == "python":
         return _python_syntax(tokens)
-    return _c_cpp_syntax(tokens)
+    return _c_cpp_syntax(tokens, language)
 
 
 # ── C / C++ ──────────────────────────────────────────────────
 
-def _c_cpp_syntax(tokens):
+def _c_cpp_syntax(tokens, language="c"):
     errors = []
     braces, parens, brackets = [], [], []
 
+    # ── Bracket matching ──
     for tok in tokens:
         if tok["type"] != "PUNCTUATION": continue
         if   tok["value"] == "{": braces.append(tok)
@@ -35,36 +45,67 @@ def _c_cpp_syntax(tokens):
             if not brackets: errors.append({"phase":"syntax","line":tok["line"],"column":tok["column"],"message":"Unexpected ']' — no matching '['","token":"]"})
             else: brackets.pop()
 
-    # Unclosed braces, parens, and brackets
-    for b  in braces:    errors.append({"phase":"syntax","line":b["line"],"column":b["column"],"message":"Unclosed brace '{' — missing corresponding '}'","token":"{"})
-    for p  in parens:    errors.append({"phase":"syntax","line":p["line"],"column":p["column"],"message":"Unclosed parenthesis '(' — missing corresponding ')'","token":"("})
-    for br in brackets:  errors.append({"phase":"syntax","line":br["line"],"column":br["column"],"message":"Unclosed bracket '[' — missing corresponding ']'","token":"["})
+    for b  in braces:   errors.append({"phase":"syntax","line":b["line"],"column":b["column"],"message":"Unclosed brace '{' — missing corresponding '}'","token":"{"})
+    for p  in parens:   errors.append({"phase":"syntax","line":p["line"],"column":p["column"],"message":"Unclosed parenthesis '(' — missing corresponding ')'","token":"("})
+    for br in brackets: errors.append({"phase":"syntax","line":br["line"],"column":br["column"],"message":"Unclosed bracket '[' — missing corresponding ']'","token":"["})
 
+    # ── Invalid characters for C/C++ (@ $ ` ?) ──
+    for tok in tokens:
+        if tok["type"] == "PUNCTUATION" and tok["value"] in INVALID_C_PUNCT:
+            errors.append({"phase":"syntax","line":tok["line"],"column":tok["column"],
+                           "message":f"Invalid character '{tok['value']}' in {language.upper()} code",
+                           "token":tok["value"]})
+
+    # ── if / while / for must be followed by ( ──
     for i, tok in enumerate(tokens):
-        nxt  = tokens[i+1] if i+1 < len(tokens) else None
-        prev = tokens[i-1] if i > 0 else None
+        nxt = tokens[i+1] if i+1 < len(tokens) else None
+        if tok["value"] in ("if","while","for") and tok["type"] == "KEYWORD":
+            if not nxt or nxt["value"] != "(":
+                errors.append({"phase":"syntax","line":tok["line"],"column":tok["column"],
+                               "message":f"'{tok['value']}' must be followed by '('",
+                               "token":tok["value"]})
 
-        # Check for if/while/for requiring '(' after
-        if tok["value"] in ("if","while","for") and (not nxt or nxt["value"] != "("):
-            errors.append({"phase":"syntax","line":tok["line"],"column":tok["column"],"message":f"'{tok['value']}' must be followed by '('","token":tok["value"]})
+    # ── Missing semicolons — per-line analysis ──
+    line_tokens = defaultdict(list)
+    for tok in tokens:
+        line_tokens[tok["line"]].append(tok)
 
-        # Ensure return is followed by a semicolon
-        if tok["value"] == "return":
-            j = i + 1
-            while j < len(tokens) and tokens[j]["value"] not in ("{", "}"):
-                if tokens[j]["value"] == ";":
-                    break
-                j += 1
-            if j >= len(tokens) or tokens[j]["value"] != ";":
-                errors.append({"phase":"syntax", "line":tok["line"], "column":tok["column"],
-                               "message":"Missing semicolon after 'return'","token":"return"})
+    sorted_lines = sorted(line_tokens.keys())
 
-        # Check for missing semicolons after variable declarations or expressions in C/C++
-        if tok["type"] in ("IDENTIFIER","INTEGER_LITERAL","FLOAT_LITERAL") and \
-           nxt and nxt["value"] in C_TYPES and tok["line"] < nxt["line"] and \
-           (not prev or prev["value"] not in (")", "{", "}", ";", ",")):
-            errors.append({"phase":"syntax","line":tok["line"],"column":tok["column"]+len(tok["value"]),
-                           "message":f"Missing semicolon after '{tok['value']}'","token":tok["value"]})
+    STMT_END_TYPES  = {"IDENTIFIER","INTEGER_LITERAL","FLOAT_LITERAL","STRING_LITERAL","CHAR_LITERAL"}
+    STMT_END_PUNCTS = {")", "]"}
+    NO_SEMI_ENDS    = {"{", "}", ";", ",", ":", "#", "\\"}
+
+    for li, line_num in enumerate(sorted_lines):
+        line_toks = line_tokens[line_num]
+        first_tok = line_toks[0]
+        last_tok  = line_toks[-1]
+
+        # Skip preprocessor lines
+        if first_tok["value"] == "#":
+            continue
+
+        # Skip compound statement header lines (if/else/while/for/struct/class/…)
+        if first_tok["type"] == "KEYWORD" and first_tok["value"] in COMPOUND_KW:
+            continue
+
+        # Skip lines that already end with a proper terminator
+        if last_tok["value"] in NO_SEMI_ENDS:
+            continue
+
+        # Function definition: line ends with ) and contains ( — not a statement
+        if last_tok["value"] == ")" and any(t["value"] == "(" for t in line_toks):
+            continue
+
+        # Line ends with an expression → must have a semicolon
+        if last_tok["type"] in STMT_END_TYPES or last_tok["value"] in STMT_END_PUNCTS:
+            if li + 1 >= len(sorted_lines):
+                continue
+            errors.append({"phase":"syntax",
+                           "line":line_num,
+                           "column":last_tok["column"] + len(last_tok["value"]),
+                           "message":f"Missing semicolon after '{last_tok['value']}'",
+                           "token":last_tok["value"]})
 
     return errors
 
@@ -75,13 +116,9 @@ def _python_syntax(tokens):
     errors = []
     braces, parens, brackets = [], [], []
 
-    # Track open/close braces, parens, and brackets
+    # ── Bracket matching ──
     for tok in tokens:
         if tok["type"] != "PUNCTUATION": continue
-        if   tok["value"] == "{": braces.append(tok)
-        elif tok["value"] == "}":
-            if not braces: errors.append({"phase":"syntax","line":tok["line"],"column":tok["column"],"message":"Unexpected '}' — no matching '{'","token":"}"})
-            else: braces.pop()
         if   tok["value"] == "(": parens.append(tok)
         elif tok["value"] == ")":
             if not parens: errors.append({"phase":"syntax","line":tok["line"],"column":tok["column"],"message":"Unexpected ')' — no matching '('","token":")"})
@@ -90,18 +127,21 @@ def _python_syntax(tokens):
         elif tok["value"] == "]":
             if not brackets: errors.append({"phase":"syntax","line":tok["line"],"column":tok["column"],"message":"Unexpected ']' — no matching '['","token":"]"})
             else: brackets.pop()
+        if   tok["value"] == "{": braces.append(tok)
+        elif tok["value"] == "}":
+            if not braces: errors.append({"phase":"syntax","line":tok["line"],"column":tok["column"],"message":"Unexpected '}' — no matching '{'","token":"}"})
+            else: braces.pop()
 
-    # Unclosed braces, parens, and brackets
-    for b  in braces:   errors.append({"phase":"syntax","line":b["line"],"column":b["column"],"message":"Unclosed brace '{' — missing corresponding '}'","token":"{"})
     for p  in parens:   errors.append({"phase":"syntax","line":p["line"],"column":p["column"],"message":"Unclosed parenthesis '(' — missing corresponding ')'","token":"("})
     for br in brackets: errors.append({"phase":"syntax","line":br["line"],"column":br["column"],"message":"Unclosed bracket '[' — missing corresponding ']'","token":"["})
+    for b  in braces:   errors.append({"phase":"syntax","line":b["line"],"column":b["column"],"message":"Unclosed brace '{' — missing corresponding '}'","token":"{"})
 
-    # Group tokens by line
+    # ── Group tokens by line ──
     line_tokens = defaultdict(list)
     for tok in tokens:
         line_tokens[tok["line"]].append(tok)
 
-    # Block keywords must end with ':', check for missing ':'
+    # ── Block keywords must end with ':' ──
     for i, tok in enumerate(tokens):
         if tok["type"] != "KEYWORD" or tok["value"] not in PYTHON_BLOCK_KW:
             continue
@@ -110,22 +150,27 @@ def _python_syntax(tokens):
             continue
         if not any(t["value"] == ":" for t in toks_on_line):
             errors.append({"phase":"syntax","line":tok["line"],"column":tok["column"],
-                           "message":f"'{tok['value']}' block header must end with ':'","token":tok["value"]})
+                           "message":f"'{tok['value']}' block header must end with ':'",
+                           "token":tok["value"]})
 
-    # def / class must be followed by an identifier
+    # ── def / class must be followed by an identifier ──
     for i, tok in enumerate(tokens):
         if tok["value"] in ("def","class"):
             nxt = tokens[i+1] if i+1 < len(tokens) else None
             if not nxt or nxt["type"] != "IDENTIFIER":
                 errors.append({"phase":"syntax","line":tok["line"],"column":tok["column"],
-                               "message":f"'{tok['value']}' must be followed by a name","token":tok["value"]})
+                               "message":f"'{tok['value']}' must be followed by a name",
+                               "token":tok["value"]})
 
-    # Check for 'elif' not following 'if' and other conditional block errors
-    for i, tok in enumerate(tokens):
-        if tok["value"] == "elif":
-            prev_tok = tokens[i-1] if i > 0 else None
-            if prev_tok and prev_tok["value"] != "if":
-                errors.append({"phase":"syntax", "line":tok["line"], "column":tok["column"],
-                               "message":"'elif' should be preceded by 'if'","token":"elif"})
+    # ── elif / else without a preceding if ──
+    saw_if = False
+    for tok in tokens:
+        if tok["value"] == "if":
+            saw_if = True
+            continue
+        if tok["value"] in ("elif","else") and not saw_if:
+            errors.append({"phase":"syntax","line":tok["line"],"column":tok["column"],
+                           "message":f"'{tok['value']}' without a preceding 'if'",
+                           "token":tok["value"]})
 
     return errors
