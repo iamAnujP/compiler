@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Syntax & Semantic Error Detector</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <h1>Syntax<span>.</span>Detector</h1>
+    <div class="lang-selector">
+      <button class="lang-btn active" data-lang="c"      onclick="setLanguage('c',this)">C</button>
+      <button class="lang-btn"        data-lang="cpp"    onclick="setLanguage('cpp',this)">C++</button>
+      <button class="lang-btn"        data-lang="python" onclick="setLanguage('python',this)">Python</button>
+    </div>
+  </div>
+  <div class="header-right">
+    <button class="btn-sample" onclick="loadSample()">Load Sample</button>
+    <button class="btn-analyze" id="analyze-btn" onclick="runAnalysis()">▶ Analyze Code</button>
+  </div>
+</header>
+
+<main>
+  <div class="editor-section">
+    <div class="section-label">⟨/⟩ Source Code — <span id="lang-label">C Language</span></div>
+    <div class="editor-wrap">
+      <div class="line-numbers" id="line-numbers">
+        <div style="height:22px;line-height:22px;">1</div>
+      </div>
+      <textarea
+        id="code-input"
+        placeholder="Paste your code here..."
+        oninput="updateLineNumbers()"
+        onscroll="syncScroll()"
+      ></textarea>
+    </div>
+  </div>
+
+  <div class="output-section">
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('results', this)">Results</button>
+      <button class="tab" onclick="switchTab('tokens', this)">Tokens</button>
+      <button class="tab" onclick="switchTab('history', this)">History</button>
+    </div>
+
+    <div id="tab-results" class="tab-content active">
+      <div class="empty-state" id="results-empty">
+        <div class="empty-icon">▶</div>
+        <p>Select a language, paste your code, and click Analyze.</p>
+      </div>
+      <div id="results-content" style="display:none;"></div>
+    </div>
+
+    <div id="tab-tokens" class="tab-content">
+      <div class="empty-state" id="tokens-empty">
+        <p>Run analysis to view token stream.</p>
+      </div>
+      <div id="tokens-content" style="display:none;"></div>
+    </div>
+
+    <div id="tab-history" class="tab-content">
+      <div id="history-content"></div>
+    </div>
+  </div>
+</main>
+
+<script src="/static/script.js"></script>
+</body>
+</html>
