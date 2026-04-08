@@ -1,11 +1,9 @@
-/* ── RESET ── */
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
-/* ── BODY ── */
 body {
   font-family: 'Segoe UI', system-ui, sans-serif;
   background: linear-gradient(135deg, #0d1117, #0b1220);
@@ -15,7 +13,6 @@ body {
   flex-direction: column;
 }
 
-/* ── HEADER ── */
 header {
   background: rgba(22, 27, 34, 0.85);
   backdrop-filter: blur(10px);
@@ -31,7 +28,6 @@ header h1 span { color: #58a6ff; }
 .header-left { display: flex; align-items: center; gap: 16px; }
 .header-right { display: flex; gap: 10px; }
 
-/* ── LANGUAGE SELECTOR ── */
 .lang-selector {
   display: flex;
   background: #0d1117;
@@ -51,7 +47,6 @@ header h1 span { color: #58a6ff; }
 .lang-btn:hover { color: #c9d1d9; background: #161b22; }
 .lang-btn.active { background: #1f6feb; color: #fff; }
 
-/* ── BUTTONS ── */
 button {
   border-radius: 8px;
   font-size: 13px;
@@ -71,7 +66,6 @@ button {
 .btn-analyze:hover { transform: translateY(-1px); box-shadow: 0 0 18px rgba(56,139,253,0.5); }
 .btn-analyze.loading { opacity: 0.6; cursor: not-allowed; }
 
-/* ── LAYOUT ── */
 main {
   flex: 1;
   display: grid;
@@ -83,7 +77,6 @@ main {
   height: calc(100vh - 65px);
 }
 
-/* ── EDITOR ── */
 .editor-section { display: flex; flex-direction: column; gap: 10px; }
 .section-label { font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.08em; }
 .editor-wrap {
@@ -119,7 +112,6 @@ main {
   overflow-x: auto;
 }
 
-/* ── OUTPUT PANEL ── */
 .output-section {
   display: flex;
   flex-direction: column;
@@ -130,7 +122,6 @@ main {
   backdrop-filter: blur(8px);
 }
 
-/* ── TABS ── */
 .tabs { display: flex; background: #0d1117; border-bottom: 1px solid #30363d; }
 .tab {
   flex: 1;
@@ -155,11 +146,9 @@ main {
 }
 .tab-content.active { display: block; }
 
-/* ── EMPTY STATE ── */
 .empty-state { text-align: center; color: #6e7681; margin-top: 60px; }
 .empty-icon { font-size: 30px; margin-bottom: 10px; }
 
-/* ── SUMMARY BANNER ── */
 .summary-banner {
   display: flex;
   align-items: center;
@@ -183,7 +172,6 @@ main {
 .summary-title { font-weight: 600; font-size: 14px; color: #e6edf3; }
 .summary-sub   { font-size: 12px; color: #8b949e; margin-top: 2px; }
 
-/* ── PIPELINE ── */
 .pipeline { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
 .arrow { color: #484f58; font-size: 14px; }
 .phase-pill { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; border: 1px solid transparent; }
@@ -192,7 +180,6 @@ main {
 .phase-pill.syntax-err  { background: rgba(210,153,34,0.15); color: #d29922; border-color: rgba(210,153,34,0.4); }
 .phase-pill.semantic-err{ background: rgba(139,148,158,0.15);color: #8b949e; border-color: rgba(139,148,158,0.4); }
 
-/* ── ERROR CARDS ── */
 .error-card {
   background: #0d1117;
   border: 1px solid #30363d;
@@ -212,7 +199,6 @@ main {
 .error-token    { margin-top: 6px; font-size: 12px; color: #8b949e; }
 .error-token code { background: #161b22; padding: 2px 6px; border-radius: 4px; color: #79c0ff; font-family: monospace; }
 
-/* ── TOKEN TABLE ── */
 .token-header {
   display: grid;
   grid-template-columns: 70px 1fr 1fr;
@@ -238,7 +224,6 @@ main {
 .t-pos { color: #484f58; }
 .t-val { color: #e6edf3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* TOKEN TYPE COLORS */
 .t-keyword    { color: #ff7b72; }
 .t-identifier { color: #79c0ff; }
 .t-integer    { color: #79c0ff; }
@@ -249,7 +234,6 @@ main {
 .t-punctuation{ color: #8b949e; }
 .t-unknown    { color: #f85149; }
 
-/* ── HISTORY ── */
 .history-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .history-label { font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.06em; }
 .clear-btn { background: transparent; color: #6e7681; font-size: 12px; padding: 4px 8px; border: 1px solid #30363d; border-radius: 6px; cursor: pointer; transition: 0.2s; }
@@ -263,11 +247,9 @@ main {
 .history-time { font-size: 11px; color: #484f58; }
 .history-snippet { font-family: monospace; font-size: 11px; color: #6e7681; white-space: pre-wrap; word-break: break-all; max-height: 48px; overflow: hidden; }
 
-/* ── SCROLLBAR ── */
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 10px; }
 
-/* ── RESPONSIVE ── */
 @media (max-width: 800px) {
   main { grid-template-columns: 1fr; height: auto; }
 }
