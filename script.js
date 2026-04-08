@@ -191,7 +191,7 @@ function loadSample() {
   const samples = {
     c: `int main() {\n    int x = 10;\n    int y = 20\n    float z = 3.14;\n\n    total = x + y;\n\n    int bad = 9.99;\n    int w = x @ y;\n\n    return 0;\n}`,
     cpp: `#include<iostream>\nusing namespace std;\n\nint main() {\n    int x = 10\n    cout << x << endl\n    return 0;\n}`,
-    python: `def main():\n    x = 10\n    y = 20\n    print(x + y\n\nmain()`
+    python: `def main():\n    x = 10\n    y = 20\n    print(x + y\n\n`
   };
   document.getElementById("code-input").value = samples[currentLanguage];
   updateLineNumbers();
