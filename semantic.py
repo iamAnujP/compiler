@@ -1,41 +1,44 @@
-# ── C / C++ shared constants ──────────────────────────────────
-PURE_TYPES  = {"int","char","float","double","void","long","short","unsigned","signed","bool"}
-QUALIFIERS  = {"const","static","extern","auto","register","volatile","inline","mutable"}
-INT_TYPES   = {"int","short","long","unsigned","signed","char","bool"}
+PURE_TYPES = {"int","char","float","double","void","long","short","unsigned","signed","bool"}
+QUALIFIERS = {"const","static","extern","auto","register","volatile","inline","mutable"}
+INT_TYPES  = {"int","short","long","unsigned","signed","char","bool"}
 FLOAT_TYPES = {"float","double"}
 
 C_KEYWORDS = {
     "auto","break","case","char","const","continue","default","do","double",
     "else","enum","extern","float","for","goto","if","inline","int","long",
     "register","return","short","signed","sizeof","static","struct","switch",
-    "typedef","union","unsigned","void","volatile","while"
+    "typedef","union","unsigned","void","volatile","while",
 }
+
 CPP_KEYWORDS = C_KEYWORDS | {
     "bool","class","catch","constexpr","delete","explicit","false","friend",
     "mutable","namespace","new","noexcept","nullptr","operator","override",
     "private","protected","public","template","this","throw","true","try",
-    "typename","using","virtual","final","static_cast","dynamic_cast","const_cast"
+    "typename","using","virtual","final","static_cast","dynamic_cast","const_cast",
 }
+
 PYTHON_KEYWORDS = {
     "False","None","True","and","as","assert","async","await","break","class",
     "continue","def","del","elif","else","except","finally","for","from",
     "global","if","import","in","is","lambda","nonlocal","not","or","pass",
-    "raise","return","try","while","with","yield"
+    "raise","return","try","while","with","yield",
 }
 
 C_BUILTINS = {
     "printf","scanf","malloc","free","exit","NULL","EOF","stdin","stdout",
     "stderr","sizeof","strlen","strcpy","strcat","strcmp","atoi","atof",
     "abs","pow","sqrt","rand","srand","time","fopen","fclose","fprintf",
-    "fscanf","fgets","fputs","assert","memcpy","memset","memmove","main"
+    "fscanf","fgets","fputs","assert","memcpy","memset","memmove","main",
 }
+
 CPP_BUILTINS = C_BUILTINS | {
     "cout","cin","cerr","clog","endl","string","vector","map","set","pair",
     "list","deque","queue","stack","array","tuple","optional","variant",
     "make_pair","make_shared","make_unique","shared_ptr","unique_ptr",
     "begin","end","size","push_back","pop_back","emplace_back",
-    "std","swap","sort","find","count","min","max","move","forward"
+    "std","swap","sort","find","count","min","max","move","forward",
 }
+
 PYTHON_BUILTINS = {
     "print","input","len","range","int","float","str","list","dict","set",
     "tuple","bool","type","isinstance","issubclass","hasattr","getattr",
@@ -51,197 +54,188 @@ PYTHON_BUILTINS = {
     "PermissionError","OSError","IOError","NameError","ZeroDivisionError",
     "ImportError","ModuleNotFoundError","AssertionError","OverflowError",
     "NotImplementedError","RecursionError","MemoryError","UnicodeError",
-    "ArithmeticError","LookupError","EnvironmentError","ConnectionError"
+    "ArithmeticError","LookupError","EnvironmentError",
 }
 
 
 def semantic_analyze(tokens, language="c"):
     if language == "python":
         return _python_semantic(tokens)
-    builtins = CPP_BUILTINS if language == "cpp" else C_BUILTINS
-    kw_set   = CPP_KEYWORDS  if language == "cpp" else C_KEYWORDS
-    return _c_cpp_semantic(tokens, builtins, kw_set)
+    return _c_cpp_semantic(tokens, language)
 
 
-# ── C / C++ ──────────────────────────────────────────────────
 
-def _c_cpp_semantic(tokens, builtins, kw_set):
+
+def _c_cpp_semantic(tokens, language="c"):
     errors = []
-    scope_stack = [{}]
+    keywords = CPP_KEYWORDS if language == "cpp" else C_KEYWORDS
+    builtins = CPP_BUILTINS if language == "cpp" else C_BUILTINS
 
-    def current_scope(): return scope_stack[-1]
-    def lookup(name):
-        for s in reversed(scope_stack):
-            if name in s: return s[name]
-    def declare(name, entry):
-        s = current_scope()
-        if name in s and len(scope_stack) > 1:
-            errors.append({"phase":"semantic","line":entry["line"],"column":entry["column"],
-                           "message":f"Duplicate declaration of '{name}' — already declared at line {s[name]['line']}","token":name})
-        else:
-            s[name] = entry
+    declared = set(builtins)
 
-    i = 0
-    while i < len(tokens):
-        tok  = tokens[i]
-        nxt  = tokens[i+1] if i+1 < len(tokens) else None
-        prev = tokens[i-1] if i > 0 else None
-
-        if tok["value"] == "{": scope_stack.append({}); i += 1; continue
-        if tok["value"] == "}":
-            if len(scope_stack) > 1: scope_stack.pop()
-            i += 1; continue
-
-        is_qual  = tok["value"] in QUALIFIERS
-        type_tok = tokens[i+1] if is_qual and i+1 < len(tokens) else tok
-        off      = 1 if is_qual else 0
-
-        if type_tok and type_tok["value"] in PURE_TYPES:
-            name_idx = i + 1 + off
-            name_tok = tokens[name_idx] if name_idx < len(tokens) else None
-            if name_tok and name_tok["type"] == "IDENTIFIER":
-                after_idx = i + 2 + off
-                after = tokens[after_idx] if after_idx < len(tokens) else None
+    for i, tok in enumerate(tokens):
+        if tok["type"] == "KEYWORD" and tok["value"] in (PURE_TYPES | QUALIFIERS):
+            j = i + 1
+            while j < len(tokens) and (
+                (tokens[j]["type"] == "KEYWORD" and tokens[j]["value"] in (PURE_TYPES | QUALIFIERS))
+                or tokens[j]["value"] == "*"
+            ):
+                j += 1
+            if j < len(tokens) and tokens[j]["type"] == "IDENTIFIER":
+                name_tok = tokens[j]
+                after = tokens[j+1] if j+1 < len(tokens) else None
+                declared.add(name_tok["value"])
+               
                 if after and after["value"] == "(":
-                    declare(name_tok["value"],{"name":name_tok["value"],"type":type_tok["value"],"line":name_tok["line"],"column":name_tok["column"],"kind":"function"})
-                    j = i + 3 + off
-                    while j < len(tokens) and tokens[j]["value"] != ")":
-                        if tokens[j]["value"] in PURE_TYPES and j+1 < len(tokens) and tokens[j+1]["type"] == "IDENTIFIER":
-                            declare(tokens[j+1]["value"],{"name":tokens[j+1]["value"],"type":tokens[j]["value"],"line":tokens[j+1]["line"],"column":tokens[j+1]["column"],"kind":"parameter"})
-                            j += 2
-                        else: j += 1
-                        if j < len(tokens) and tokens[j]["value"] == ",": j += 1
-                    i = j + 1; continue
-                else:
-                    declare(name_tok["value"],{"name":name_tok["value"],"type":type_tok["value"],"line":name_tok["line"],"column":name_tok["column"],"kind":"variable"})
-            i += 1; continue
+                    k = j + 2
+                    while k < len(tokens) and tokens[k]["value"] != ")":
+                        if tokens[k]["type"] == "KEYWORD" and tokens[k]["value"] in PURE_TYPES:
+                            m = k + 1
+                            while m < len(tokens) and tokens[m]["value"] == "*":
+                                m += 1
+                            if m < len(tokens) and tokens[m]["type"] == "IDENTIFIER":
+                                declared.add(tokens[m]["value"])
+                        k += 1
 
-        if tok["type"] == "IDENTIFIER":
-            is_decl = prev and (prev["value"] in PURE_TYPES or prev["value"] in QUALIFIERS or prev["value"] == ",")
-            if not is_decl and tok["value"] not in builtins and tok["value"] not in kw_set:
-                if not lookup(tok["value"]):
-                    msg = (f"Call to undeclared function '{tok['value']}'" if nxt and nxt["value"] == "("
-                           else f"Use of undeclared identifier '{tok['value']}'")
-                    errors.append({"phase":"semantic","line":tok["line"],"column":tok["column"],"message":msg,"token":tok["value"]})
+    for i, tok in enumerate(tokens):
+        if tok["type"] != "IDENTIFIER": continue
+        if tok["value"] in keywords: continue
+        if tok["value"] in declared: continue
 
-        if tok["value"] == "=":
-            lhs = tokens[i-1] if i > 0 else None
-            rhs = tokens[i+1] if i+1 < len(tokens) else None
-            if lhs and rhs:
-                entry = lookup(lhs["value"])
-                if entry:
-                    if entry["type"] in INT_TYPES and rhs["type"] == "FLOAT_LITERAL":
-                        errors.append({"phase":"semantic","line":rhs["line"],"column":rhs["column"],
-                                       "message":f"Type mismatch: assigning float '{rhs['value']}' to integer '{lhs['value']}' (data loss)","token":rhs["value"]})
-                    if entry["type"] in (INT_TYPES | FLOAT_TYPES) and rhs["type"] == "STRING_LITERAL":
-                        errors.append({"phase":"semantic","line":rhs["line"],"column":rhs["column"],
-                                       "message":f"Type mismatch: cannot assign string to numeric variable '{lhs['value']}'","token":rhs["value"]})
-        i += 1
+        prev = tokens[i-1] if i > 0 else None
+        nxt  = tokens[i+1] if i+1 < len(tokens) else None
+
+        if nxt and nxt["value"] == "(": continue          
+        if prev and prev["value"] in (".", "->"): continue 
+        if prev and prev["value"] == "::": continue        
+        if nxt  and nxt["value"]  == "::": continue        
+        if prev and prev["value"] == "<": continue          
+        if nxt  and nxt["value"]  == ">": continue          
+        if nxt  and nxt["value"]  == "*": continue          
+        import re
+        if re.match(r'^[A-Z_][A-Z0-9_]+$', tok["value"]): continue  
+        if prev and prev["value"] in ("struct","enum","union","typedef","class","namespace"): continue
+        if prev and prev["value"] in ("#","include"): continue
+
+        errors.append({"phase":"semantic","line":tok["line"],"column":tok["column"],
+                       "message":f"'{tok['value']}' used but not declared","token":tok["value"]})
+        declared.add(tok["value"])  
+
+    for i, tok in enumerate(tokens):
+        if tok["type"] == "OPERATOR" and tok["value"] in ("/","%"):
+            nxt = tokens[i+1] if i+1 < len(tokens) else None
+            if nxt and nxt["type"] == "INTEGER_LITERAL" and nxt["value"] == "0":
+                errors.append({"phase":"semantic","line":tok["line"],"column":tok["column"],
+                               "message":"Division by zero","token":tok["value"]})
+
+    
+    for i, tok in enumerate(tokens):
+        if tok["type"] == "KEYWORD" and tok["value"] == "void":
+            nxt   = tokens[i+1] if i+1 < len(tokens) else None
+            after = tokens[i+2] if i+2 < len(tokens) else None
+            if nxt and nxt["type"] == "IDENTIFIER" and after and after["value"] in (";","="):
+                errors.append({"phase":"semantic","line":tok["line"],"column":tok["column"],
+                               "message":f"Cannot declare variable '{nxt['value']}' of type 'void'",
+                               "token":"void"})
 
     return errors
 
 
-# ── Python ───────────────────────────────────────────────────
+
 
 def _python_semantic(tokens):
     errors = []
-    declared = set()
+    scope = set(PYTHON_BUILTINS)
 
-    # ── Pass 1: collect all declared names ───────────────────
-    i = 0
-    while i < len(tokens):
-        tok = tokens[i]
-        nxt = tokens[i+1] if i+1 < len(tokens) else None
-
-        # def name( — collect function name + parameters
-        if tok["value"] == "def" and nxt and nxt["type"] == "IDENTIFIER":
-            declared.add(nxt["value"])
-            j = i + 2
-            if j < len(tokens) and tokens[j]["value"] == "(":
-                j += 1
-                while j < len(tokens) and tokens[j]["value"] != ")":
-                    if tokens[j]["type"] == "IDENTIFIER":
-                        declared.add(tokens[j]["value"])
-                    j += 1
-
-        # class Name
-        elif tok["value"] == "class" and nxt and nxt["type"] == "IDENTIFIER":
-            declared.add(nxt["value"])
-
-        # import x, y  /  import x as alias
-        elif tok["value"] == "import":
-            j = i + 1
-            while j < len(tokens) and tokens[j]["line"] == tok["line"]:
-                if tokens[j]["type"] == "IDENTIFIER" and tokens[j]["value"] not in PYTHON_KEYWORDS:
-                    declared.add(tokens[j]["value"])
-                j += 1
-
-        # from x import a, b
-        elif tok["value"] == "from":
-            j = i + 1
-            while j < len(tokens) and tokens[j]["value"] != "import": j += 1
-            j += 1
-            while j < len(tokens) and tokens[j]["line"] == tok["line"]:
-                if tokens[j]["type"] == "IDENTIFIER":
-                    declared.add(tokens[j]["value"])
-                j += 1
-
-        # name = value  (not ==)
-        elif tok["type"] == "IDENTIFIER" and nxt and nxt["value"] == "=":
+  
+    for i, tok in enumerate(tokens):
+       
+        if tok["type"] == "IDENTIFIER":
+            nxt   = tokens[i+1] if i+1 < len(tokens) else None
             after = tokens[i+2] if i+2 < len(tokens) else None
-            if not after or after["value"] != "=":
-                prev = tokens[i-1] if i > 0 else None
-                if not prev or prev["value"] not in (".", "->", "::"):
-                    declared.add(tok["value"])
+            if nxt and nxt["type"] == "OPERATOR" and nxt["value"] == "=":
+                if not after or after["value"] != "=":
+                    scope.add(tok["value"])
 
-        # name += / -= / etc.
-        elif tok["type"] == "IDENTIFIER" and nxt and nxt["value"] in ("+=","-=","*=","/=","//=","**=","%=","&=","|=","^="):
-            declared.add(tok["value"])
+        if tok["value"] == "def":
+            nxt = tokens[i+1] if i+1 < len(tokens) else None
+            if nxt and nxt["type"] == "IDENTIFIER":
+                scope.add(nxt["value"])
+                k = i + 2
+                if k < len(tokens) and tokens[k]["value"] == "(":
+                    k += 1
+                    while k < len(tokens) and tokens[k]["value"] != ")":
+                        if tokens[k]["type"] == "IDENTIFIER":
+                            scope.add(tokens[k]["value"])
+                        k += 1
 
-        # for var in ... / for x, y in ...
-        elif tok["value"] == "for":
-            j = i + 1
-            while j < len(tokens) and tokens[j]["value"] != "in":
-                if tokens[j]["type"] == "IDENTIFIER":
-                    declared.add(tokens[j]["value"])
-                j += 1
+        
+        if tok["value"] == "class":
+            nxt = tokens[i+1] if i+1 < len(tokens) else None
+            if nxt and nxt["type"] == "IDENTIFIER":
+                scope.add(nxt["value"])
 
-        # ... as var
-        elif tok["value"] == "as" and nxt and nxt["type"] == "IDENTIFIER":
-            declared.add(nxt["value"])
+        if tok["value"] == "import":
+            k = i + 1
+            while k < len(tokens) and tokens[k]["type"] == "IDENTIFIER":
+                scope.add(tokens[k]["value"])
+                k += 1
+                if k < len(tokens) and tokens[k]["value"] == ",": k += 1
+                else: break
 
-        # global / nonlocal
-        elif tok["value"] in ("global","nonlocal"):
-            j = i + 1
-            while j < len(tokens) and tokens[j]["line"] == tok["line"]:
-                if tokens[j]["type"] == "IDENTIFIER":
-                    declared.add(tokens[j]["value"])
-                j += 1
+        if tok["value"] == "from":
+            k = i + 1
+            while k < len(tokens) and tokens[k]["type"] == "IDENTIFIER": k += 1
+            if k < len(tokens) and tokens[k]["value"] == "import":
+                k += 1
+                while k < len(tokens) and tokens[k]["type"] == "IDENTIFIER":
+                    scope.add(tokens[k]["value"])
+                    k += 1
+                    if k < len(tokens) and tokens[k]["value"] == ",": k += 1
+                    else: break
 
-        i += 1
+        
+        if tok["value"] == "for":
+            nxt = tokens[i+1] if i+1 < len(tokens) else None
+            if nxt and nxt["type"] == "IDENTIFIER":
+                scope.add(nxt["value"])
 
-    # ── Pass 2: check usage ───────────────────────────────────
+     
+        if tok["value"] == "as":
+            nxt = tokens[i+1] if i+1 < len(tokens) else None
+            if nxt and nxt["type"] == "IDENTIFIER":
+                scope.add(nxt["value"])
+
+    
     for i, tok in enumerate(tokens):
         if tok["type"] != "IDENTIFIER": continue
-        nxt  = tokens[i+1] if i+1 < len(tokens) else None
+        if tok["value"] in PYTHON_KEYWORDS or tok["value"] in PYTHON_BUILTINS: continue
+        if tok["value"] in scope: continue
+
         prev = tokens[i-1] if i > 0 else None
+        nxt  = tokens[i+1] if i+1 < len(tokens) else None
 
-        # Skip declaration positions
-        if prev and prev["value"] in ("def","class","import","from","as","global","nonlocal","lambda",".","->"): continue
-        # Skip if attribute access
-        if prev and prev["value"] == ".": continue
-        # Skip assignment target
-        if nxt and nxt["value"] == "=":
+        if prev and prev["value"] == ".": continue       
+        if nxt  and nxt["value"]  == ".": continue
+        if prev and prev["value"] == "@": continue       
+        if nxt  and nxt["value"]  == "=":               
             after = tokens[i+2] if i+2 < len(tokens) else None
-            if not after or after["value"] != "=": continue
-        # Skip augmented assignment
-        if nxt and nxt["value"] in ("+=","-=","*=","/=","//=","**=","%=","&=","|=","^="): continue
-        # Skip for-loop variable
-        if prev and prev["value"] == "for": continue
+            if after and after["value"] != "=": continue
+        if prev and prev["value"] in ("import","from"): continue
+        if prev and prev["value"] == ":": continue      
+        if tok["value"] in ("self","cls"): continue
+        import re
+        if re.match(r'^[A-Z_][A-Z0-9_]*$', tok["value"]): continue  
 
-        if tok["value"] not in PYTHON_BUILTINS and tok["value"] not in PYTHON_KEYWORDS and tok["value"] not in declared:
-            msg = (f"Call to undeclared function '{tok['value']}'" if nxt and nxt["value"] == "("
-                   else f"Use of undeclared variable '{tok['value']}'")
-            errors.append({"phase":"semantic","line":tok["line"],"column":tok["column"],"message":msg,"token":tok["value"]})
+        errors.append({"phase":"semantic","line":tok["line"],"column":tok["column"],
+                       "message":f"'{tok['value']}' used but not defined","token":tok["value"]})
+        scope.add(tok["value"])
+
+    for i, tok in enumerate(tokens):
+        if tok["type"] == "OPERATOR" and tok["value"] in ("/","%","//"):
+            nxt = tokens[i+1] if i+1 < len(tokens) else None
+            if nxt and nxt["type"] == "INTEGER_LITERAL" and nxt["value"] == "0":
+                errors.append({"phase":"semantic","line":tok["line"],"column":tok["column"],
+                               "message":"Division by zero","token":tok["value"]})
 
     return errors
